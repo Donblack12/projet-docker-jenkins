@@ -2,7 +2,6 @@ pipeline {
     agent any
 
     environment {
-        CONTAINER_ID = ''
         PATH = "/usr/local/bin:/opt/homebrew/bin:${env.PATH}"
     }
 
@@ -17,8 +16,8 @@ pipeline {
             steps {
                 script {
                     def output = sh(script: 'docker run -d sum-app', returnStdout: true)
-                    CONTAINER_ID = output.trim()
-                    echo "Conteneur ID: ${CONTAINER_ID}"
+                    env.CONTAINER_ID = output.trim()
+                    echo "Conteneur ID: ${env.CONTAINER_ID}"
                 }
             }
         }
@@ -34,7 +33,7 @@ pipeline {
                         def arg2 = vars[1]
                         def expectedSum = vars[2].toFloat()
                         def output = sh(
-                            script: "docker exec ${CONTAINER_ID} python /app/sum.py ${arg1} ${arg2}",
+                            script: "docker exec ${env.CONTAINER_ID} python /app/sum.py ${arg1} ${arg2}",
                             returnStdout: true
                         )
                         def result = output.trim().toFloat()
@@ -50,8 +49,12 @@ pipeline {
 
         stage('Deploy') {
             steps {
-                script {
-                    sh 'docker login -u donbeni -p TON_MOT_DE_PASSE'
+                withCredentials([usernamePassword(
+                    credentialsId: 'dockerhub-creds',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                )]) {
+                    sh 'docker login -u $DOCKER_USER -p $DOCKER_PASS'
                     sh 'docker tag sum-app donbeni/sum-app:latest'
                     sh 'docker push donbeni/sum-app:latest'
                 }
@@ -62,7 +65,7 @@ pipeline {
     post {
         always {
             script {
-                if (env.CONTAINER_ID != '') {
+                if (env.CONTAINER_ID != null && env.CONTAINER_ID != '') {
                     sh "docker stop ${env.CONTAINER_ID} || true"
                     sh "docker rm ${env.CONTAINER_ID} || true"
                 }
